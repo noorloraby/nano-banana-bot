@@ -173,8 +173,8 @@ class NanoBananaClient:
         logger.info("Browser started successfully.")
         
         # Human-like initial navigation
-        # Instead of using page.goto() directly (which can be detected),
-        # we simulate more natural navigation patterns
+        # Strategy: First go to Google (as a stepping stone), then navigate to target
+        # This is more natural than going directly from about:blank
         try:
             import random
             
@@ -184,8 +184,20 @@ class NanoBananaClient:
             
             logger.info(f"Navigating to {self.target_url}")
             
-            # Method 1: Try using keyboard navigation (most human-like)
-            # This simulates typing the URL in the address bar
+            # Step 1: First navigate to Google as a stepping stone
+            # This is less suspicious than going directly from about:blank
+            try:
+                await self.page.goto(
+                    "https://www.google.com",
+                    wait_until="domcontentloaded",
+                    timeout=15000
+                )
+                await asyncio.sleep(random.uniform(1.0, 2.0))
+                logger.info("Arrived at Google, now navigating to target...")
+            except Exception as e:
+                logger.warning(f"Could not navigate to Google first: {e}")
+            
+            # Step 2: Now navigate to target using keyboard (more human-like)
             try:
                 # Focus the page first
                 await self.page.bring_to_front()
@@ -195,7 +207,7 @@ class NanoBananaClient:
                 await asyncio.sleep(random.uniform(0.3, 0.6))
                 
                 # Type the URL with human-like delays
-                await self.page.keyboard.type(self.target_url, delay=random.randint(30, 80))
+                await self.page.keyboard.type(self.target_url, delay=random.randint(20, 50))
                 await asyncio.sleep(random.uniform(0.2, 0.4))
                 
                 # Press Enter to navigate
@@ -208,10 +220,10 @@ class NanoBananaClient:
             except Exception as kb_error:
                 logger.warning(f"Keyboard navigation failed: {kb_error}, falling back to goto with referrer")
                 
-                # Method 2: Fallback - use goto with realistic referrer
+                # Fallback - use goto with realistic referrer
                 await self.page.goto(
                     self.target_url,
-                    referer="https://www.google.com/search?q=google+labs+flow",
+                    referer="https://www.google.com/",
                     wait_until="networkidle"
                 )
                 
