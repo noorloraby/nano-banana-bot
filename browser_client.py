@@ -24,29 +24,56 @@ class NanoBananaClient:
         logger.info(f"Starting Nano Banana Client with Stealth (Persistent: {config.USER_DATA_DIR})...")
         self.playwright = await async_playwright().start()
         
+        # Detect if running in Docker/Linux
+        import platform
+        is_linux = platform.system() == "Linux"
+        
+        # Use appropriate user agent for the platform
+        if is_linux:
+            user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        else:
+            user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        
         args = [
             '--disable-blink-features=AutomationControlled',
             '--no-sandbox',
             '--disable-infobars', 
             '--window-size=1280,800',
-            # Additional stealth args
             '--disable-features=IsolateOrigins,site-per-process',
+            # Additional anti-detection args
+            '--disable-dev-shm-usage',
+            '--disable-background-networking',
+            '--disable-default-apps',
+            '--disable-extensions',
+            '--disable-sync',
+            '--disable-translate',
+            '--hide-scrollbars',
+            '--metrics-recording-only',
+            '--mute-audio',
+            '--no-first-run',
+            '--safebrowsing-disable-auto-update',
+            # Important for headless detection bypass
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-background-timer-throttling',
+            '--disable-ipc-flooding-protection',
+            '--enable-features=NetworkService,NetworkServiceInProcess',
         ]
 
         # Use chromium by default, but launch_persistent_context
         # Note: launch_persistent_context launches a browser instance that persists to user_data_dir
         self.context = await self.playwright.chromium.launch_persistent_context(
             user_data_dir=config.USER_DATA_DIR,
-            channel="chrome", # Try to use installed chrome for better stealth/experience if available, else remove
+            channel="chrome",  # Use installed chrome for better stealth
             headless=config.HEADLESS,
             args=args,
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            user_agent=user_agent,
             viewport={'width': 1280, 'height': 800},
             locale='en-US',
             timezone_id='America/New_York',
             permissions=['geolocation'],
             geolocation={'latitude': 40.71, 'longitude': -74.00},
-            # java_script_enabled=True # Default
+            ignore_default_args=['--enable-automation'],  # Critical: disable automation flag
         )
         
         # In persistent context, pages might already exist (e.g. from previous session restore), 
@@ -73,24 +100,74 @@ class NanoBananaClient:
 
         if not stealth_applied:
             logger.info("Applying manual stealth scripts...")
+            # Comprehensive stealth scripts for Linux/Docker
             await self.page.add_init_script("""
+                // Remove webdriver property
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
                 });
-            """)
-            await self.page.add_init_script("""
-                window.navigator.chrome = {
-                    runtime: {},
-                    # etc
+                
+                // Fix navigator.plugins (empty in headless)
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [
+                        { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                        { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+                        { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
+                    ]
+                });
+                
+                // Fix navigator.languages
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['en-US', 'en']
+                });
+                
+                // Mock chrome runtime
+                window.chrome = {
+                    runtime: {
+                        connect: () => {},
+                        sendMessage: () => {},
+                        onMessage: { addListener: () => {} }
+                    },
+                    loadTimes: () => ({
+                        commitLoadTime: Date.now() / 1000,
+                        connectionInfo: 'http/1.1',
+                        finishDocumentLoadTime: Date.now() / 1000,
+                        finishLoadTime: Date.now() / 1000,
+                        firstPaintAfterLoadTime: 0,
+                        firstPaintTime: Date.now() / 1000,
+                        navigationType: 'Other',
+                        npnNegotiatedProtocol: 'unknown',
+                        requestTime: Date.now() / 1000,
+                        startLoadTime: Date.now() / 1000,
+                        wasAlternateProtocolAvailable: false,
+                        wasFetchedViaSpdy: false,
+                        wasNpnNegotiated: false
+                    }),
+                    csi: () => ({ startE: Date.now(), onloadT: Date.now(), pageT: Date.now(), tran: 15 })
                 };
-            """)
-            await self.page.add_init_script("""
+                
+                // Fix permissions query
                 const originalQuery = window.navigator.permissions.query;
-                return window.navigator.permissions.query = (parameters) => (
+                window.navigator.permissions.query = (parameters) => (
                     parameters.name === 'notifications' ?
-                    Promise.resolve({ state: 'denied' }) :
+                    Promise.resolve({ state: Notification.permission }) :
                     originalQuery(parameters)
                 );
+                
+                // Fix WebGL vendor/renderer (common detection method)
+                const getParameterProxyHandler = {
+                    apply: function(target, ctx, args) {
+                        const param = args[0];
+                        const result = Reflect.apply(target, ctx, args);
+                        // UNMASKED_VENDOR_WEBGL
+                        if (param === 37445) return 'Google Inc. (NVIDIA)';
+                        // UNMASKED_RENDERER_WEBGL
+                        if (param === 37446) return 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 6GB Direct3D11 vs_5_0 ps_5_0, D3D11)';
+                        return result;
+                    }
+                };
+                const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = new Proxy(originalGetParameter, getParameterProxyHandler);
             """)
 
         logger.info("Browser started successfully.")

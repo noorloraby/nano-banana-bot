@@ -1,11 +1,18 @@
 # Use official Playwright image with Python (includes browsers)
 FROM mcr.microsoft.com/playwright/python:v1.49.0-jammy
 
+# Prevent interactive prompts during apt-get install
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
 WORKDIR /app
 
 # Install Google Chrome (for better stealth - channel="chrome" support)
 # Also install noVNC and x11vnc for visual login access
-RUN apt-get update && apt-get install -y wget gnupg x11vnc xvfb novnc \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget gnupg x11vnc xvfb novnc tzdata \
+    && ln -fs /usr/share/zoneinfo/UTC /etc/localtime \
+    && dpkg-reconfigure -f noninteractive tzdata \
     && wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - \
     && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
