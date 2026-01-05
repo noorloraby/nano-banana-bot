@@ -31,11 +31,8 @@ RUN pip install playwright-stealth==1.0.6
 # Copy application code
 COPY bot.py browser_client.py config.py ./
 
-# Copy user_data if it exists (will contain fresh Linux profile after first login)
-COPY user_data/ ./user_data/
-
-# Create temp directory
-RUN mkdir -p temp
+# Create directories (user_data will be populated after first login)
+RUN mkdir -p temp user_data
 
 # Set environment variables for container
 # Set HEADLESS=False for first run to login, then change to True
@@ -46,8 +43,13 @@ ENV DISPLAY=:99
 # Expose noVNC port for browser access
 EXPOSE 6080
 
-# Script to start Xvfb + VNC + bot
-CMD Xvfb :99 -screen 0 1280x800x24 & \
-    x11vnc -display :99 -forever -shared -rfbport 5900 & \
-    /usr/share/novnc/utils/launch.sh --vnc localhost:5900 --listen 6080 & \
-    sleep 2 && python bot.py
+# Create startup script
+RUN echo '#!/bin/bash\n\
+    Xvfb :99 -screen 0 1280x800x24 &\n\
+    x11vnc -display :99 -forever -shared -rfbport 5900 &\n\
+    /usr/share/novnc/utils/launch.sh --vnc localhost:5900 --listen 6080 &\n\
+    sleep 2\n\
+    exec python bot.py\n' > /app/start.sh && chmod +x /app/start.sh
+
+# Use JSON format for proper signal handling
+CMD ["/bin/bash", "/app/start.sh"]
