@@ -1,0 +1,9 @@
+Package: <module 'playwright_stealth' from 'C:\\Users\\NOOR\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\playwright_stealth\\__init__.py'>
+Path: ['C:\\Users\\NOOR\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\playwright_stealth']
+Scanning playwright_stealth
+FOUND: Stealth -> <class 'type'>
+FOUND: stealth -> <class 'module'>
+Scanning playwright_stealth.case_insensitive_dict
+Scanning playwright_stealth.context_managers
+Scanning playwright_stealth.stealth
+FOUND: Stealth -> <class 'type'>
