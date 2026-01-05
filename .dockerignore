@@ -1,0 +1,29 @@
+# Virtual environment
+.venv/
+
+# Cache
+__pycache__/
+
+# Debug files
+debug_*.html
+*.log
+
+# Temp files (runtime generated)
+temp/
+
+# Test files
+*.jpeg
+*.jpg
+scan_results.txt
+test_*.py
+verify_*.py
+
+# Git
+.git/
+.gitignore
+
+# Environment (will be set in Coolify)
+.env
+
+# NOTE: user_data/ is NOT excluded - it will be baked into the image
+# This preserves your logged-in browser session

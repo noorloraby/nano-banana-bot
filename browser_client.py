@@ -134,6 +134,36 @@ class NanoBananaClient:
         except Exception as e:
             logger.error(f"Failed to refresh page: {e}")
 
+    async def _check_for_inline_generation_error(self) -> tuple[bool, str | None]:
+        """Check for inline generation errors (e.g., 'Something went wrong.' displayed in result area).
+        This is different from toast errors - it appears inside the image generation result container.
+        Returns (has_error, error_message)."""
+        if not self.page:
+            return (False, None)
+        
+        try:
+            # Look for the error message pattern shown in the HTML structure
+            # The error appears in a div with specific text content
+            error_divs = self.page.locator('div').filter(has_text="Something went wrong.")
+            
+            count = await error_divs.count()
+            if count > 0:
+                # Verify it's the actual error message, not just any div containing this text
+                for i in range(count):
+                    div = error_divs.nth(i)
+                    try:
+                        text = await div.inner_text()
+                        # Check if this div is the actual error message (text should be exactly or very close to the error)
+                        if text.strip() == "Something went wrong.":
+                            logger.warning("Detected inline generation error: Something went wrong.")
+                            return (True, "Something went wrong.")
+                    except:
+                        pass
+        except Exception as e:
+            logger.debug(f"Error checking for inline generation error: {e}")
+        
+        return (False, None)
+
     async def _check_for_toast_error(self) -> tuple[bool, str | None]:
         """Check for error/warning toast messages on the page.
         Returns (has_error, error_message).
@@ -439,6 +469,14 @@ class NanoBananaClient:
                      logger.error(f"Website error during generation: {error_msg}")
                      await self._clear_prompt_and_images()
                      raise WebsiteError(error_msg)
+                 
+                 # Check for inline generation errors (e.g., "Something went wrong." in result area)
+                 has_inline_error, inline_error_msg = await self._check_for_inline_generation_error()
+                 if has_inline_error:
+                     logger.error(f"Inline generation error detected: {inline_error_msg}")
+                     await self._refresh_page()
+                     await self._clear_prompt_and_images()
+                     raise WebsiteError(inline_error_msg)
                  
                  current_data = await self._find_images_by_prompt_matches(prompt)
                  
