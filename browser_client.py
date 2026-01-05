@@ -172,12 +172,49 @@ class NanoBananaClient:
 
         logger.info("Browser started successfully.")
         
-        # Initial navigation
+        # Human-like initial navigation
+        # Instead of using page.goto() directly (which can be detected),
+        # we simulate more natural navigation patterns
         try:
-             # Add random delay
-             await asyncio.sleep(1)
-             logger.info(f"Navigating to {self.target_url}")
-             await self.page.goto(self.target_url)
+            import random
+            
+            # Add random human-like delay (1-3 seconds)
+            delay = random.uniform(1.5, 3.0)
+            await asyncio.sleep(delay)
+            
+            logger.info(f"Navigating to {self.target_url}")
+            
+            # Method 1: Try using keyboard navigation (most human-like)
+            # This simulates typing the URL in the address bar
+            try:
+                # Focus the page first
+                await self.page.bring_to_front()
+                
+                # Use Ctrl+L to focus address bar, then type URL
+                await self.page.keyboard.press("Control+l")
+                await asyncio.sleep(random.uniform(0.3, 0.6))
+                
+                # Type the URL with human-like delays
+                await self.page.keyboard.type(self.target_url, delay=random.randint(30, 80))
+                await asyncio.sleep(random.uniform(0.2, 0.4))
+                
+                # Press Enter to navigate
+                await self.page.keyboard.press("Enter")
+                
+                # Wait for navigation to complete
+                await self.page.wait_for_load_state("networkidle", timeout=30000)
+                logger.info("Navigation completed via keyboard method")
+                
+            except Exception as kb_error:
+                logger.warning(f"Keyboard navigation failed: {kb_error}, falling back to goto with referrer")
+                
+                # Method 2: Fallback - use goto with realistic referrer
+                await self.page.goto(
+                    self.target_url,
+                    referer="https://www.google.com/search?q=google+labs+flow",
+                    wait_until="networkidle"
+                )
+                
         except Exception as e:
             logger.error(f"Failed initial navigation: {e}")
 
