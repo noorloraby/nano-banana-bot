@@ -39,14 +39,25 @@ RUN mkdir -p temp user_data
 ENV HEADLESS=False
 ENV USER_DATA_DIR=/app/user_data
 ENV DISPLAY=:99
+# VNC password - set this in Coolify environment variables!
+ENV VNC_PASSWORD=""
 
 # Expose noVNC port for browser access
 EXPOSE 6080
 
-# Create startup script
+# Create startup script with optional password protection
 RUN echo '#!/bin/bash\n\
     Xvfb :99 -screen 0 1280x800x24 &\n\
+    \n\
+    # Start x11vnc with or without password\n\
+    if [ -n "$VNC_PASSWORD" ]; then\n\
+    echo "Starting VNC with password protection..."\n\
+    x11vnc -display :99 -forever -shared -rfbport 5900 -passwd "$VNC_PASSWORD" &\n\
+    else\n\
+    echo "WARNING: VNC running without password!"\n\
     x11vnc -display :99 -forever -shared -rfbport 5900 &\n\
+    fi\n\
+    \n\
     /usr/share/novnc/utils/launch.sh --vnc localhost:5900 --listen 6080 &\n\
     sleep 2\n\
     exec python bot.py\n' > /app/start.sh && chmod +x /app/start.sh
