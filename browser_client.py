@@ -99,60 +99,17 @@ class NanoBananaClient:
 
         logger.info("Browser started successfully.")
         
-        # Human-like initial navigation
-        # Strategy: First go to Google (as a stepping stone), then navigate to target
-        # This is more natural than going directly from about:blank
+        # Navigate directly to target URL
         try:
             import random
             
-            # Add random human-like delay (1-3 seconds)
-            delay = random.uniform(1.5, 3.0)
+            # Add small random delay
+            delay = random.uniform(1.0, 2.0)
             await asyncio.sleep(delay)
             
             logger.info(f"Navigating to {self.target_url}")
-            
-            # Step 1: First navigate to Google as a stepping stone
-            # This is less suspicious than going directly from about:blank
-            try:
-                await self.page.goto(
-                    "https://www.google.com",
-                    wait_until="domcontentloaded",
-                    timeout=15000
-                )
-                await asyncio.sleep(random.uniform(1.0, 2.0))
-                logger.info("Arrived at Google, now navigating to target...")
-            except Exception as e:
-                logger.warning(f"Could not navigate to Google first: {e}")
-            
-            # Step 2: Now navigate to target using keyboard (more human-like)
-            try:
-                # Focus the page first
-                await self.page.bring_to_front()
-                
-                # Use Ctrl+L to focus address bar, then type URL
-                await self.page.keyboard.press("Control+l")
-                await asyncio.sleep(random.uniform(0.3, 0.6))
-                
-                # Type the URL with human-like delays
-                await self.page.keyboard.type(self.target_url, delay=random.randint(20, 50))
-                await asyncio.sleep(random.uniform(0.2, 0.4))
-                
-                # Press Enter to navigate
-                await self.page.keyboard.press("Enter")
-                
-                # Wait for navigation to complete
-                await self.page.wait_for_load_state("networkidle", timeout=30000)
-                logger.info("Navigation completed via keyboard method")
-                
-            except Exception as kb_error:
-                logger.warning(f"Keyboard navigation failed: {kb_error}, falling back to goto with referrer")
-                
-                # Fallback - use goto with realistic referrer
-                await self.page.goto(
-                    self.target_url,
-                    referer="https://www.google.com/",
-                    wait_until="networkidle"
-                )
+            await self.page.goto(self.target_url, wait_until="networkidle", timeout=30000)
+            logger.info("Navigation completed")
                 
         except Exception as e:
             logger.error(f"Failed initial navigation: {e}")
