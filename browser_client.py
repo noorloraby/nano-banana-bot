@@ -83,92 +83,19 @@ class NanoBananaClient:
         else:
             self.page = await self.context.new_page()
 
-        # Attempt to use playwright-stealth, fallback to manual scripts
-        stealth_applied = False
-        try:
-            # Try imports based on investigation
-            try:
-                from playwright_stealth import stealth_async
-                await stealth_async(self.page)
-                stealth_applied = True
-                logger.info("Applied playwright-stealth via stealth_async")
-            except ImportError:
-                 # Try usage of Stealth class if available or just skip
-                 pass
-        except Exception as e:
-            logger.warning(f"Could not apply playwright-stealth: {e}")
-
-        if not stealth_applied:
-            logger.info("Applying manual stealth scripts...")
-            # Comprehensive stealth scripts for Linux/Docker
-            await self.page.add_init_script("""
-                // Remove webdriver property
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                });
-                
-                // Fix navigator.plugins (empty in headless)
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [
-                        { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-                        { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
-                        { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
-                    ]
-                });
-                
-                // Fix navigator.languages
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['en-US', 'en']
-                });
-                
-                // Mock chrome runtime
-                window.chrome = {
-                    runtime: {
-                        connect: () => {},
-                        sendMessage: () => {},
-                        onMessage: { addListener: () => {} }
-                    },
-                    loadTimes: () => ({
-                        commitLoadTime: Date.now() / 1000,
-                        connectionInfo: 'http/1.1',
-                        finishDocumentLoadTime: Date.now() / 1000,
-                        finishLoadTime: Date.now() / 1000,
-                        firstPaintAfterLoadTime: 0,
-                        firstPaintTime: Date.now() / 1000,
-                        navigationType: 'Other',
-                        npnNegotiatedProtocol: 'unknown',
-                        requestTime: Date.now() / 1000,
-                        startLoadTime: Date.now() / 1000,
-                        wasAlternateProtocolAvailable: false,
-                        wasFetchedViaSpdy: false,
-                        wasNpnNegotiated: false
-                    }),
-                    csi: () => ({ startE: Date.now(), onloadT: Date.now(), pageT: Date.now(), tran: 15 })
-                };
-                
-                // Fix permissions query
-                const originalQuery = window.navigator.permissions.query;
-                window.navigator.permissions.query = (parameters) => (
-                    parameters.name === 'notifications' ?
-                    Promise.resolve({ state: Notification.permission }) :
-                    originalQuery(parameters)
-                );
-                
-                // Fix WebGL vendor/renderer (common detection method)
-                const getParameterProxyHandler = {
-                    apply: function(target, ctx, args) {
-                        const param = args[0];
-                        const result = Reflect.apply(target, ctx, args);
-                        // UNMASKED_VENDOR_WEBGL
-                        if (param === 37445) return 'Google Inc. (NVIDIA)';
-                        // UNMASKED_RENDERER_WEBGL
-                        if (param === 37446) return 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 6GB Direct3D11 vs_5_0 ps_5_0, D3D11)';
-                        return result;
-                    }
-                };
-                const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
-                WebGLRenderingContext.prototype.getParameter = new Proxy(originalGetParameter, getParameterProxyHandler);
-            """)
+        # Apply minimal stealth scripts that don't cause errors
+        # Note: playwright-stealth library was causing "utils is not defined" errors
+        # so we use only essential, error-free patches
+        logger.info("Applying minimal stealth patches...")
+        
+        # Only patch webdriver property - this is the most critical detection
+        await self.page.add_init_script("""
+            // Remove webdriver property - critical for bot detection
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+                configurable: true
+            });
+        """)
 
         logger.info("Browser started successfully.")
         
