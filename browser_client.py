@@ -275,15 +275,75 @@ class NanoBananaClient:
         # Wait for UI to settle
         await asyncio.sleep(0.5)
 
-    async def generate_image(self, prompt: str, image_paths: list = None):
+    async def _set_aspect_ratio(self, aspect_ratio: str):
+        """Set the aspect ratio in Nano Banana settings.
+        aspect_ratio should be 'landscape' or 'portrait'."""
+        if not self.page or aspect_ratio not in ("landscape", "portrait"):
+            return
+        
+        logger.info(f"Setting aspect ratio to: {aspect_ratio}")
+        
+        try:
+            # Click the Settings button (tune icon)
+            settings_btn = self.page.locator("button").filter(
+                has=self.page.locator("i", has_text="tune")
+            ).first
+            
+            await settings_btn.wait_for(state="visible", timeout=5000)
+            await settings_btn.click()
+            logger.info("Clicked Settings button")
+            await asyncio.sleep(0.5)
+            
+            # Wait for the settings modal/popover to appear
+            # Look for the Aspect Ratio combobox
+            aspect_ratio_btn = self.page.locator('button[role="combobox"]').filter(
+                has=self.page.locator("span", has_text="Aspect Ratio")
+            ).first
+            
+            await aspect_ratio_btn.wait_for(state="visible", timeout=5000)
+            await aspect_ratio_btn.click()
+            logger.info("Clicked Aspect Ratio dropdown")
+            await asyncio.sleep(0.3)
+            
+            # Select the appropriate option
+            if aspect_ratio == "landscape":
+                option_text = "Landscape (16:9)"
+            else:
+                option_text = "Portrait (9:16)"
+            
+            # The options appear in a dropdown/popover
+            option = self.page.get_by_text(option_text, exact=True)
+            await option.wait_for(state="visible", timeout=3000)
+            await option.click()
+            logger.info(f"Selected {option_text}")
+            await asyncio.sleep(0.3)
+            
+            # Close the settings modal by clicking outside or pressing Escape
+            await self.page.keyboard.press("Escape")
+            await asyncio.sleep(0.3)
+            
+        except Exception as e:
+            logger.warning(f"Failed to set aspect ratio: {e}")
+            # Try to close any open modal
+            try:
+                await self.page.keyboard.press("Escape")
+            except:
+                pass
+
+    async def generate_image(self, prompt: str, image_paths: list = None, aspect_ratio: str = None):
         """
         Generates an image from a text prompt and optional image inputs.
+        aspect_ratio: 'landscape' or 'portrait' to set the output aspect ratio.
         """
         if not self.page:
             # Try to recover or just fail
             raise RuntimeError("Browser not started")
 
-        logger.info(f"Attempting to generate image for prompt: {prompt} (Images: {len(image_paths) if image_paths else 0})")
+        logger.info(f"Attempting to generate image for prompt: {prompt} (Images: {len(image_paths) if image_paths else 0}, Aspect: {aspect_ratio or 'default'})")
+        
+        # Set aspect ratio if specified
+        if aspect_ratio:
+            await self._set_aspect_ratio(aspect_ratio)
         
         # Verification check - are we forbidden?
         try:

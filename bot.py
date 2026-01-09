@@ -8,6 +8,8 @@ from browser_client import NanoBananaClient, WebsiteError
 import signal
 import os
 import uuid
+import re
+from PIL import Image
 
 # Setup logging
 logging.basicConfig(
@@ -17,6 +19,58 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ... (imports)
+
+def parse_aspect_ratio_command(prompt: str) -> tuple[str, str | None]:
+    """Parse prompt for /portrait or /landscape commands.
+    Returns (clean_prompt, aspect_ratio) where aspect_ratio is 'portrait', 'landscape', or None."""
+    # Case-insensitive matching for /portrait or /landscape
+    portrait_match = re.search(r'/portrait\b', prompt, re.IGNORECASE)
+    landscape_match = re.search(r'/landscape\b', prompt, re.IGNORECASE)
+    
+    aspect_ratio = None
+    clean_prompt = prompt
+    
+    if portrait_match:
+        aspect_ratio = "portrait"
+        clean_prompt = re.sub(r'/portrait\b', '', prompt, flags=re.IGNORECASE).strip()
+    elif landscape_match:
+        aspect_ratio = "landscape"
+        clean_prompt = re.sub(r'/landscape\b', '', prompt, flags=re.IGNORECASE).strip()
+    
+    # Clean up any double spaces
+    clean_prompt = re.sub(r'\s+', ' ', clean_prompt).strip()
+    
+    return (clean_prompt, aspect_ratio)
+
+def detect_aspect_ratio_from_images(image_paths: list) -> str:
+    """Analyze images to determine if they are portrait or landscape.
+    Returns 'portrait' if all images are portrait, 'landscape' otherwise (default).
+    Handles EXIF orientation metadata for rotated images."""
+    if not image_paths:
+        logger.info("No image paths provided for aspect ratio detection")
+        return "landscape"  # Default
+    
+    logger.info(f"Detecting aspect ratio from {len(image_paths)} images: {image_paths}")
+    orientations = []
+    for path in image_paths:
+        try:
+            with Image.open(path) as img:
+                # Apply EXIF orientation to get the true visual dimensions
+                # Many phone cameras store images in landscape with EXIF rotation
+                from PIL import ImageOps
+                img = ImageOps.exif_transpose(img)
+                width, height = img.size
+                orientation = "portrait" if height > width else "landscape"
+                logger.info(f"Image {path}: {width}x{height} -> {orientation}")
+                orientations.append(orientation)
+        except Exception as e:
+            logger.warning(f"Could not analyze image {path}: {e}")
+            orientations.append("landscape")  # Default on error
+    
+    # If all images are portrait, return portrait; otherwise landscape
+    result = "portrait" if orientations and all(o == "portrait" for o in orientations) else "landscape"
+    logger.info(f"Aspect ratio detection result: {result} (orientations: {orientations})")
+    return result
 
 # Global client
 browser_client = NanoBananaClient()
@@ -213,11 +267,25 @@ async def process_generation(update: Update, context: ContextTypes.DEFAULT_TYPE,
     await process_generation_internal(context, update.effective_chat.id, prompt, image_paths, update.message.message_id)
 
 async def process_generation_internal(context, chat_id, prompt, image_paths, reply_to_msg_id):
-    await context.bot.send_message(chat_id=chat_id, text=f"Generating image... (Images input: {len(image_paths) if image_paths else 0})", reply_to_message_id=reply_to_msg_id)
+    # Parse aspect ratio command from prompt (e.g., /portrait, /landscape)
+    clean_prompt, explicit_aspect = parse_aspect_ratio_command(prompt)
+    
+    # Determine aspect ratio
+    if explicit_aspect:
+        aspect_ratio = explicit_aspect
+        logger.info(f"Using explicit aspect ratio: {aspect_ratio}")
+    elif image_paths:
+        aspect_ratio = detect_aspect_ratio_from_images(image_paths)
+        logger.info(f"Auto-detected aspect ratio from images: {aspect_ratio}")
+    else:
+        aspect_ratio = None  # Use website default
+    
+    aspect_info = f", Aspect: {aspect_ratio}" if aspect_ratio else ""
+    await context.bot.send_message(chat_id=chat_id, text=f"Generating image... (Images input: {len(image_paths) if image_paths else 0}{aspect_info})", reply_to_message_id=reply_to_msg_id)
 
     try:
         # Generate (returns a list of io.BytesIO)
-        images_data = await browser_client.generate_image(prompt, image_paths)
+        images_data = await browser_client.generate_image(clean_prompt, image_paths, aspect_ratio)
         
         if not images_data:
             await context.bot.send_message(chat_id=chat_id, text="No images were generated.", reply_to_message_id=reply_to_msg_id)
