@@ -498,7 +498,7 @@ class NanoBananaClient:
         try:
             # Wait a bit for validation/button enablement
             await asyncio.sleep(0.5)
-            create_btn = self.page.get_by_role("button", name="Create")
+            create_btn = self.page.get_by_role("button", name="arrow_forward Create")
             # Ensure it's enabled
             await create_btn.wait_for(state="visible")
             if await create_btn.is_disabled():
