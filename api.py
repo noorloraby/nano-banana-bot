@@ -35,6 +35,9 @@ browser_client = NanoBananaClient()
 # Lock for serializing browser access (single browser instance)
 browser_lock = asyncio.Lock()
 
+# Flag to skip browser init (when run via main.py with shared browser)
+SKIP_BROWSER_INIT = os.getenv("SKIP_BROWSER_INIT", "false").lower() == "true"
+
 
 async def verify_api_key(x_api_key: str = Header(..., description="API Key for authentication")):
     """Dependency to verify API key."""
@@ -47,7 +50,10 @@ async def verify_api_key(x_api_key: str = Header(..., description="API Key for a
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize browser on startup."""
+    """Initialize browser on startup (unless managed externally)."""
+    if SKIP_BROWSER_INIT:
+        logger.info("Skipping browser init (managed externally)")
+        return
     logger.info("Starting Nano Banana API server...")
     await browser_client.start()
     logger.info("Browser initialized successfully")
@@ -55,7 +61,10 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Cleanup browser on shutdown."""
+    """Cleanup browser on shutdown (unless managed externally)."""
+    if SKIP_BROWSER_INIT:
+        logger.info("Skipping browser cleanup (managed externally)")
+        return
     logger.info("Shutting down Nano Banana API server...")
     await browser_client.stop()
     logger.info("Browser stopped")

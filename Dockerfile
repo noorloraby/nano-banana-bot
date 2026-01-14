@@ -29,7 +29,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install playwright-stealth==1.0.6
 
 # Copy application code
-COPY bot.py browser_client.py config.py api.py ./
+COPY bot.py browser_client.py config.py api.py main.py ./
 
 # Create directories (user_data will be populated after first login)
 RUN mkdir -p temp user_data
@@ -49,7 +49,19 @@ EXPOSE 6080 8000
 
 # Create startup script with RUN_MODE support
 RUN echo '#!/bin/bash\n\
+    echo "Starting Xvfb..."\n\
     Xvfb :99 -screen 0 1280x800x24 &\n\
+    \n\
+    # Wait for Xvfb to be ready\n\
+    echo "Waiting for Xvfb to be ready..."\n\
+    for i in $(seq 1 30); do\n\
+    if xdpyinfo -display :99 >/dev/null 2>&1; then\n\
+    echo "Xvfb is ready!"\n\
+    break\n\
+    fi\n\
+    echo "Waiting for Xvfb... ($i/30)"\n\
+    sleep 1\n\
+    done\n\
     \n\
     # Start x11vnc with or without password\n\
     if [ -n "$VNC_PASSWORD" ]; then\n\
@@ -70,8 +82,7 @@ RUN echo '#!/bin/bash\n\
     exec python api.py\n\
     ;;\n\
     "both")\n\
-    python bot.py &\n\
-    exec python api.py\n\
+    exec python main.py\n\
     ;;\n\
     *)\n\
     exec python bot.py\n\
