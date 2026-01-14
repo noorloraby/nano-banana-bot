@@ -74,7 +74,7 @@ async def shutdown_event():
 async def generate_image(
     prompt: str = Form(..., description="Text prompt for image generation"),
     aspect_ratio: Optional[str] = Form(None, description="Aspect ratio: 'portrait' or 'landscape'"),
-    quality: Optional[str] = Form("2K", description="Download quality: '1K', '2K', or '4K'"),
+    quality: Optional[str] = Form("1K", description="Download quality: '1K', '2K', or '4K'"),
     images: Optional[List[UploadFile]] = File(None, description="Optional input images"),
     _: str = Depends(verify_api_key)
 ):
