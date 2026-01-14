@@ -24,12 +24,14 @@ async def test_upscale():
         
         # 2. Upscale the first one
         logger.info("Testing upscale for index 0...")
-        upscaled_stream = await client.upscale_image(prompt, 0, "2K")
-        
+        upscaled_stream, used_upscale = await client.upscale_image(prompt, 0, "2K")
+
         if upscaled_stream:
             size = upscaled_stream.getbuffer().nbytes
-            logger.info(f"Upscale successful! Got {size} bytes.")
-            with open("test_upscaled_result.png", "wb") as f:
+            label = "Upscale" if used_upscale else "Download"
+            logger.info(f"{label} successful! Got {size} bytes.")
+            output_name = "test_upscaled_result.png" if used_upscale else "test_downloaded_result.png"
+            with open(output_name, "wb") as f:
                 f.write(upscaled_stream.getbuffer())
         else:
             logger.error("Upscale returned None.")

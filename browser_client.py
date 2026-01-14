@@ -1,6 +1,6 @@
 import asyncio
 import io
-from playwright.async_api import async_playwright, BrowserContext
+from playwright.async_api import async_playwright, BrowserContext, TimeoutError as PlaywrightTimeoutError
 # from playwright_stealth import stealth_async
 import logging
 import config
@@ -634,7 +634,7 @@ class NanoBananaClient:
     async def upscale_image(self, prompt: str, image_index: int, scale_option: str):
         """
         Upscales an image (identified by prompt and index) using the specified option (1K, 2K, 4K).
-        Returns the downloaded file bytes.
+        Returns a tuple of (downloaded file bytes, used_upscale_option).
         """
         logger.info(f"Attempting to upscale image {image_index} for prompt '{prompt}' to {scale_option}")
         
@@ -648,6 +648,23 @@ class NanoBananaClient:
 
         # Ensure visible
         await target_img_element.scroll_into_view_if_needed()
+
+        async def _download_to_stream(download):
+            path = await download.path()
+            logger.info(f"Download complete: {path}")
+
+            with open(path, "rb") as f:
+                file_data = f.read()
+
+            # Cleanup temp file
+            try:
+                import os
+                os.remove(path)
+                logger.info(f"Deleted temp file: {path}")
+            except Exception as e:
+                logger.warning(f"Failed to delete temp file {path}: {e}")
+
+            return io.BytesIO(file_data)
 
         # Locate the Download button associated with this image.
         # Assumes the button is a sibling or in the same container.
@@ -670,8 +687,24 @@ class NanoBananaClient:
              # Let's assume the previous logic found it.
              raise Exception("Could not find Download button for the image.")
 
-        await download_btn.click()
-        logger.info("Clicked Download button, waiting for menu...")
+        # First check for any existing errors
+        has_error, error_msg = await self._check_for_toast_error()
+        if has_error:
+            logger.error(f"Website error before upscale: {error_msg}")
+            raise WebsiteError(error_msg)
+
+        direct_download = None
+        try:
+            async with self.page.expect_download(timeout=3000) as download_info:
+                await download_btn.click()
+                logger.info("Clicked Download button, waiting for menu or direct download...")
+            direct_download = await download_info.value
+        except PlaywrightTimeoutError:
+            logger.info("No immediate download detected; checking for upscale menu options...")
+
+        if direct_download:
+            logger.info("Direct download started (no upscale options detected).")
+            return await _download_to_stream(direct_download), False
         
         # Wait for menu options
         # "Download 1K", "Download 2K", "Download 4K"
@@ -680,14 +713,26 @@ class NanoBananaClient:
         option_text = f"Download {scale_option}" # e.g. "Download 2K"
         
         option_btn = self.page.get_by_text(option_text, exact=False)
-        
+
         try:
             await option_btn.wait_for(state="visible", timeout=3000)
-        except:
-             # Maybe strict match issue?
-             logger.warning(f"Option '{option_text}' not found, dumping page for debug...")
-             # await self.page.screenshot(path="debug_menu_missing.png")
-             raise Exception(f"Upscale option '{option_text}' not found in menu.")
+        except PlaywrightTimeoutError:
+            # Maybe strict match issue or menu doesn't provide upscale options.
+            logger.warning(f"Option '{option_text}' not found, attempting direct download...")
+            try:
+                async with self.page.expect_download(timeout=120000) as download_info:
+                    await download_btn.click()
+                    logger.info("Clicked Download button directly, waiting for download...")
+                download = await download_info.value
+            except Exception:
+                # Check for error toast if download failed
+                has_error, error_msg = await self._check_for_toast_error()
+                if has_error:
+                    logger.error(f"Website error during download: {error_msg}")
+                    raise WebsiteError(error_msg)
+                raise
+
+            return await _download_to_stream(download), False
 
         # Click and start download with error checking
         # First check for any existing errors
@@ -695,38 +740,23 @@ class NanoBananaClient:
         if has_error:
             logger.error(f"Website error before upscale: {error_msg}")
             raise WebsiteError(error_msg)
-        
+
         try:
             async with self.page.expect_download(timeout=120000) as download_info:
                 await option_btn.click()
                 logger.info(f"Clicked {option_text}, waiting for download...")
-            
+
             download = await download_info.value
-            
-        except Exception as e:
+
+        except Exception:
             # Check for error toast if download failed
             has_error, error_msg = await self._check_for_toast_error()
             if has_error:
                 logger.error(f"Website error during upscale: {error_msg}")
                 raise WebsiteError(error_msg)
             raise
-        
-        path = await download.path()
-        logger.info(f"Download complete: {path}")
-        
-        # Read file to bytes
-        with open(path, "rb") as f:
-            file_data = f.read()
-        
-        # Cleanup temp file
-        try:
-            import os
-            os.remove(path)
-            logger.info(f"Deleted temp file: {path}")
-        except Exception as e:
-            logger.warning(f"Failed to delete temp file {path}: {e}")
-            
-        return io.BytesIO(file_data)
+
+        return await _download_to_stream(download), True
 
 
 if __name__ == "__main__":

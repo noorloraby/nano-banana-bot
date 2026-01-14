@@ -364,17 +364,24 @@ async def upscale_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Upscaling image {img_idx+1} to {scale}...", reply_to_message_id=query.message.message_id)
 
     try:
-        upscaled_stream = await browser_client.upscale_image(prompt, img_idx, scale)
+        upscaled_stream, used_upscale = await browser_client.upscale_image(prompt, img_idx, scale)
         
         if not upscaled_stream:
              await context.bot.send_message(chat_id=update.effective_chat.id, text="Failed to retrieve upscaled image.")
              return
 
+        if not used_upscale:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="No upscaling options available. Downloaded the original image instead.",
+                reply_to_message_id=query.message.message_id
+            )
+
         upscaled_stream.seek(0)
         await context.bot.send_document(
             chat_id=update.effective_chat.id,
             document=upscaled_stream,
-            filename=f"upscaled_{scale}_{req_id}.png",
+            filename=f"upscaled_{scale}_{req_id}.png" if used_upscale else f"downloaded_{req_id}.png",
             # caption=f"Upscaled to {scale}", # Optional: User seems to prefer minimal captions, but this is a file.
             reply_to_message_id=query.message.message_id
         )
