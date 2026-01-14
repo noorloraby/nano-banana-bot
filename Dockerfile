@@ -29,7 +29,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install playwright-stealth==1.0.6
 
 # Copy application code
-COPY bot.py browser_client.py config.py ./
+COPY bot.py browser_client.py config.py api.py ./
 
 # Create directories (user_data will be populated after first login)
 RUN mkdir -p temp user_data
@@ -41,11 +41,13 @@ ENV USER_DATA_DIR=/app/user_data
 ENV DISPLAY=:99
 # VNC password - set this in Coolify environment variables!
 ENV VNC_PASSWORD=""
+# RUN_MODE: "bot", "api", or "both" (default: bot for backward compatibility)
+ENV RUN_MODE="bot"
 
-# Expose noVNC port for browser access
-EXPOSE 6080
+# Expose noVNC port for browser access and API port
+EXPOSE 6080 8000
 
-# Create startup script with optional password protection
+# Create startup script with RUN_MODE support
 RUN echo '#!/bin/bash\n\
     Xvfb :99 -screen 0 1280x800x24 &\n\
     \n\
@@ -60,7 +62,21 @@ RUN echo '#!/bin/bash\n\
     \n\
     /usr/share/novnc/utils/launch.sh --vnc localhost:5900 --listen 6080 &\n\
     sleep 2\n\
-    exec python bot.py\n' > /app/start.sh && chmod +x /app/start.sh
+    \n\
+    # Run based on RUN_MODE\n\
+    echo "Starting in mode: $RUN_MODE"\n\
+    case "$RUN_MODE" in\n\
+    "api")\n\
+    exec python api.py\n\
+    ;;\n\
+    "both")\n\
+    python bot.py &\n\
+    exec python api.py\n\
+    ;;\n\
+    *)\n\
+    exec python bot.py\n\
+    ;;\n\
+    esac\n' > /app/start.sh && chmod +x /app/start.sh
 
 # Use JSON format for proper signal handling
 CMD ["/bin/bash", "/app/start.sh"]

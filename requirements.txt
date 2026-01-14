@@ -3,3 +3,6 @@ playwright
 python-dotenv
 Pillow
 playwright-stealth
+fastapi
+uvicorn[standard]
+python-multipart
