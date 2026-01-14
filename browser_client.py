@@ -17,7 +17,7 @@ class NanoBananaClient:
         self.context = None
         self.page = None
         # Specific target URL provided by user
-        self.target_url = "https://labs.google/fx/vi/tools/flow/project/0fbf791e-8869-41aa-ba78-8f5ddb30942c"
+        self.target_url = "https://labs.google/fx/tools/flow/project/feaf1427-a157-4a61-be71-62b4677ec225"
 
     async def start(self):
         """Initializes the browser with persistent context and stealth settings."""
