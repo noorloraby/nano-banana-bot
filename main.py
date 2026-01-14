@@ -3,6 +3,10 @@ Main entry point for running both Telegram bot and API server together.
 Shares a single browser client instance between both services.
 """
 
+import os
+# CRITICAL: Set this BEFORE importing api module to prevent it from starting its own browser
+os.environ["SKIP_BROWSER_INIT"] = "true"
+
 import asyncio
 import logging
 import signal
