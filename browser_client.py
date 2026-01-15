@@ -529,6 +529,8 @@ class NanoBananaClient:
              import time
              start_time = time.time()
              max_wait = config.TIMEOUT_MS / 1000
+             first_image_found_time = None  # Track when first image was found
+             second_image_wait_timeout = config.SECOND_IMAGE_WAIT_TIMEOUT_SECONDS  # Configurable wait for additional images
              
              new_items = []
              
@@ -561,16 +563,22 @@ class NanoBananaClient:
                      break
                  
                  if len(potential_new) >= 1:
-                     # Check if we waited long enough for a second one?
-                     # Let's wait a bit more aggressively if we have at least one
+                     # First image found - start the secondary timeout
                      if not new_items:
-                         # Use this as current best candidate
+                         # Use this as current best candidate and start timer
                          new_items = potential_new
-                         logger.info("Found 1 image, waiting for potential second...")
+                         first_image_found_time = time.time()
+                         logger.info(f"Found 1 image, waiting up to {second_image_wait_timeout}s for potential second...")
                      else:
                          # We already had candidates, update if we found more
                          if len(potential_new) > len(new_items):
                              new_items = potential_new
+                     
+                     # Check if we've waited long enough for the second image
+                     if first_image_found_time and (time.time() - first_image_found_time) >= second_image_wait_timeout:
+                         logger.info(f"Timeout waiting for second image after {second_image_wait_timeout}s, proceeding with {len(new_items)} image(s)")
+                         await asyncio.sleep(1)  # Brief settlement wait
+                         break
                  
                  await asyncio.sleep(1)
 

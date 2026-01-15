@@ -7,6 +7,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 HEADLESS = os.getenv("HEADLESS", "False").lower() == "true"
 USER_DATA_DIR = os.getenv("USER_DATA_DIR", "./user_data")
 TIMEOUT_MS = 120000  # 120 seconds timeout for generation
+SECOND_IMAGE_WAIT_TIMEOUT_SECONDS = int(os.getenv("SECOND_IMAGE_WAIT_TIMEOUT_SECONDS", "10"))  # Seconds to wait for additional images after first one is found
 
 # API Server Configuration
 API_KEY = os.getenv("API_KEY")  # Required for API authentication
