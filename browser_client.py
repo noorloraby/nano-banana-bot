@@ -1,9 +1,13 @@
 import asyncio
 import io
 from playwright.async_api import async_playwright, BrowserContext, TimeoutError as PlaywrightTimeoutError
-# from playwright_stealth import stealth_async
 import logging
 import config
+
+try:
+    from playwright_stealth import Stealth
+except Exception:
+    Stealth = None
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +23,47 @@ class NanoBananaClient:
         # Specific target URL provided by user
         self.target_url = "https://labs.google/fx/tools/flow/project/feaf1427-a157-4a61-be71-62b4677ec225"
 
+    @staticmethod
+    def _infer_platform_from_user_agent(user_agent: str | None, is_linux: bool) -> str:
+        if not user_agent:
+            return "Linux x86_64" if is_linux else "Win32"
+        ua = user_agent.lower()
+        if "windows" in ua:
+            return "Win32"
+        if "macintosh" in ua or "mac os x" in ua:
+            return "MacIntel"
+        if "linux" in ua:
+            return "Linux x86_64"
+        return "Linux x86_64" if is_linux else "Win32"
+
+    async def _apply_stealth(self, is_linux: bool, user_agent: str | None) -> None:
+        if not config.STEALTH_ENABLED:
+            logger.info("Stealth mode disabled via config.")
+            return
+
+        if Stealth is not None:
+            try:
+                stealth = Stealth(
+                    navigator_platform_override=self._infer_platform_from_user_agent(user_agent, is_linux),
+                    navigator_user_agent_override=user_agent,
+                    init_scripts_only=True,
+                )
+                await stealth.apply_stealth_async(self.context)
+                logger.info("playwright-stealth enabled successfully.")
+                return
+            except Exception as e:
+                logger.warning(f"playwright-stealth failed, falling back to minimal patches: {e}")
+        elif Stealth is None:
+            logger.warning("STEALTH_ENABLED=True but playwright-stealth is unavailable. Using fallback patches.")
+
+        await self.context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+                configurable: true
+            });
+        """)
+        logger.info("Fallback stealth patch applied (navigator.webdriver).")
+
     async def start(self):
         """Initializes the browser with persistent context and stealth settings."""
         logger.info(f"Starting Nano Banana Client with Stealth (Persistent: {config.USER_DATA_DIR})...")
@@ -28,11 +73,8 @@ class NanoBananaClient:
         import platform
         is_linux = platform.system() == "Linux"
         
-        # Use appropriate user agent for the platform
-        if is_linux:
-            user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        else:
-            user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        # Prefer real browser UA unless a custom one is configured.
+        user_agent = config.BROWSER_USER_AGENT
         
         args = [
             '--disable-blink-features=AutomationControlled',
@@ -62,12 +104,11 @@ class NanoBananaClient:
 
         # Use chromium by default, but launch_persistent_context
         # Note: launch_persistent_context launches a browser instance that persists to user_data_dir
-        self.context = await self.playwright.chromium.launch_persistent_context(
+        launch_options = dict(
             user_data_dir=config.USER_DATA_DIR,
             channel="chrome",  # Use installed chrome for better stealth
             headless=config.HEADLESS,
             args=args,
-            user_agent=user_agent,
             viewport={'width': 1280, 'height': 800},
             locale='en-US',
             timezone_id='America/New_York',
@@ -75,6 +116,13 @@ class NanoBananaClient:
             geolocation={'latitude': 40.71, 'longitude': -74.00},
             ignore_default_args=['--enable-automation'],  # Critical: disable automation flag
         )
+        if user_agent:
+            launch_options["user_agent"] = user_agent
+
+        self.context = await self.playwright.chromium.launch_persistent_context(**launch_options)
+
+        # Apply stealth on the browser context before any navigation.
+        await self._apply_stealth(is_linux=is_linux, user_agent=user_agent)
         
         # In persistent context, pages might already exist (e.g. from previous session restore), 
         # or we might need to create one. Usually the first page is opened.
@@ -82,20 +130,6 @@ class NanoBananaClient:
             self.page = self.context.pages[0]
         else:
             self.page = await self.context.new_page()
-
-        # Apply minimal stealth scripts that don't cause errors
-        # Note: playwright-stealth library was causing "utils is not defined" errors
-        # so we use only essential, error-free patches
-        logger.info("Applying minimal stealth patches...")
-        
-        # Only patch webdriver property - this is the most critical detection
-        await self.page.add_init_script("""
-            // Remove webdriver property - critical for bot detection
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined,
-                configurable: true
-            });
-        """)
 
         logger.info("Browser started successfully.")
         
