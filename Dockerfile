@@ -42,7 +42,7 @@ ENV DISPLAY=:99
 # VNC password - set this in Coolify environment variables!
 ENV VNC_PASSWORD=""
 # RUN_MODE: "bot", "api", or "both" (default: bot for backward compatibility)
-ENV RUN_MODE="bot"
+ENV RUN_MODE="both"
 
 # Expose noVNC port for browser access and API port
 EXPOSE 6080 8000
